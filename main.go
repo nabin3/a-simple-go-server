@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -24,7 +26,14 @@ func main() {
 		fmt.Printf("deleting databse.json...\n")
 	}
 
-	cfg := apiConfig{}
+	// by default, godotenv will look for a file named .env in the current directory
+	godotenv.Load()
+	jwtSecret := os.Getenv("JWT_SECRET")
+
+	// storing secret key inside apiConfig istance cfg
+	cfg := apiConfig{
+		jwtSecret: jwtSecret,
+	}
 
 	mux := http.NewServeMux()
 
@@ -34,6 +43,18 @@ func main() {
 
 	// Setting handler for "POST /api/users"
 	mux.HandleFunc("POST /api/users", handlerUsersPost)
+
+	// Setting handler for "PUT /api/users"
+	mux.HandleFunc("PUT /api/users", cfg.handlerUsersPut)
+
+	// Setting handler for "POST /api/login"
+	mux.HandleFunc("POST /api/login", cfg.handlerLogin)
+
+	// Setting handler for "POST /api/refresh"
+	mux.HandleFunc("POST /api/refresh", cfg.handlerRefresh)
+
+	// Setting handler for "POST /api/revoke"
+	mux.HandleFunc("POST /api/revoke", cfg.handlerRevokeRefreshToken)
 
 	// Setting handler for "POST /api/chirps"
 	mux.HandleFunc("POST /api/chirps", handlerChirpsPost)

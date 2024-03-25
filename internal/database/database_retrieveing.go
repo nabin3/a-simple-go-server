@@ -48,3 +48,18 @@ func (db *DB) GetChirpByID(id int) (Chirp, error) {
 		return Chirp{}, fmt.Errorf("chirp with id: %d doesn't exist", id)
 	}
 }
+
+// Get user by email
+func (db *DB) GetUserByEmail(email string) (User, error) {
+	data, err := db.loadDB()
+	if err != nil {
+		return User{}, err
+	}
+
+	user, exist := data.Users[email]
+	if !exist {
+		return User{}, fmt.Errorf("user with the given email id doesn't exist")
+	}
+
+	return user, nil
+}

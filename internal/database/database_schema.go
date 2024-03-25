@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"sync"
+	"time"
 )
 
 type DB struct {
@@ -15,8 +16,9 @@ type DB struct {
 }
 
 type DBStructure struct {
-	Chirps []Chirp         `json:"chirps"`
-	Users  map[string]User `json:"users"`
+	Chirps               []Chirp              `json:"chirps"`
+	Users                map[string]User      `json:"users"`
+	RevokedRefreshTokens map[string]time.Time `json:"revoked_refreshed_tokens"`
 }
 
 type Chirp struct {
@@ -49,7 +51,7 @@ func NewDB(path string) (*DB, error) {
 func (db *DB) ensureDB() error {
 	if _, err := os.ReadFile(db.path); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			DBStructureBytes, err1 := json.Marshal(DBStructure{make([]Chirp, 0), make(map[string]User)})
+			DBStructureBytes, err1 := json.Marshal(DBStructure{make([]Chirp, 0), make(map[string]User), make(map[string]time.Time)})
 			if err1 != nil {
 				return fmt.Errorf("dataBase file does not exist and in time of creating database file we needed an empty data(json), in process of creating that empty json we faced this error: %v", err1)
 			}

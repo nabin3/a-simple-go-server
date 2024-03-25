@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/nabin3/a-simple-web-server/internal/auth"
 	"github.com/nabin3/a-simple-web-server/internal/database"
 )
 
@@ -22,21 +23,23 @@ func handlerUsersPost(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&recievedData)
 	if err != nil {
-		log.Printf("error decoding from JSON: %s", err)
+		log.Printf("handlerUsersPost: error decoding from JSON: %s", err)
 		w.WriteHeader(500)
 		return
 	}
 
+	// Creating database connection
 	db, err := database.NewDB("./database.json")
 	if err != nil {
-		log.Printf("can't create connection to database, error: %v", err)
+		log.Printf("handlerUsersPost_func: can't create connection to database, error: %v", err)
 		respondWithError(w, 500, "Internal Error")
 		return
 	}
 
-	newUser, err := db.CreateUser(recievedData.Email, recievedData.Password)
+	// Creating new user and getting user's unique_id and email id for giving response to client
+	newUser, err := db.CreateUser(0, recievedData.Email, recievedData.Password)
 	if err != nil {
-		log.Printf("error: %v", err)
+		log.Printf("handleUsersPost_func: error from CreateUser_func: %v", err)
 		respondWithError(w, 500, fmt.Sprintf("error: %v", err))
 		return
 	}
@@ -44,14 +47,8 @@ func handlerUsersPost(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, newUser)
 }
 
-// Defining handler func for "POST /api/login"
-func handlerLogin(w http.ResponseWriter, r *http.Request) {
-	// Struct for sending data
-	type resp struct {
-		ID    int    `json:"id"`
-		Email string `json:"email"`
-	}
-
+// Defining handler for PUT /api/users/
+func (cfg *apiConfig) handlerUsersPut(w http.ResponseWriter, r *http.Request) {
 	// Struct for recieved data
 	type data struct {
 		Email    string `json:"email"`
@@ -63,32 +60,64 @@ func handlerLogin(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&recievedData)
 	if err != nil {
-		log.Printf("error decoding from JSON: %s", err)
+		log.Printf("handlerUsersPost: error decoding from JSON: %s", err)
 		w.WriteHeader(500)
 		return
 	}
 
+	// Creating database connection
 	db, err := database.NewDB("./database.json")
 	if err != nil {
-		log.Printf("can't create connection to database, error: %v", err)
+		log.Printf("handlerUsersPost_func: can't create connection to database, error: %v", err)
 		respondWithError(w, 500, "Internal Error")
 		return
 	}
 
-	userId, err := db.CheckUserCreditional(recievedData.Email, recievedData.Password)
+	unverifiedToken, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		log.Printf("error: %v", err)
+		log.Printf("error in handlerUsersPut: %v", err)
+		respondWithError(w, 401, "bad request")
+		return
+	}
+
+	// Checking the type of token by exmining the issuer
+	tokenIssuer, err := auth.RetrieveJwtTokenIssuer(unverifiedToken)
+	if err != nil {
+		log.Printf("error in handlerUsersPut at RetrieveJwtTokenIssuer: %v", err)
+		respondWithError(w, 500, "server-error")
+		return
+	}
+	if tokenIssuer != "chirpy-access" {
+		respondWithError(w, 401, "bad token")
+		return
+	}
+
+	emailInToken, err := auth.ValidateJWT(unverifiedToken, cfg.jwtSecret)
+	if err != nil {
+		log.Printf("error in handlerUsersPut: %v", err)
+		respondWithError(w, 401, "token couldn't be validated")
+		return
+	}
+
+	user, err := db.GetUserByEmail(emailInToken)
+	if err != nil {
+		log.Printf("error in handlerUsersPut: %v", err)
+		respondWithError(w, 401, "could't find any user for given token")
+		return
+	}
+
+	if err := db.DeleteUser(emailInToken); err != nil {
+		log.Printf("error in handlerUsersPut: %v", err)
+		respondWithError(w, 500, "server problem")
+		return
+	}
+
+	newUser, err := db.CreateUser(user.ID, recievedData.Email, recievedData.Password)
+	if err != nil {
+		log.Printf("handleUsersPost_func: error from CreateUser_func: %v", err)
 		respondWithError(w, 500, fmt.Sprintf("error: %v", err))
 		return
 	}
 
-	if userId == 0 {
-		respondWithError(w, 401, "Invalid Creditionals")
-	} else {
-		respUserData := resp{
-			ID:    userId,
-			Email: recievedData.Email,
-		}
-		respondWithJSON(w, 200, respUserData)
-	}
+	respondWithJSON(w, 200, newUser)
 }
