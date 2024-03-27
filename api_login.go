@@ -33,6 +33,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Creating database connection
 	db, err := database.NewDB("./database.json")
 	if err != nil {
 		log.Printf("can't create connection to database, error: %v", err)

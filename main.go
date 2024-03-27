@@ -57,7 +57,7 @@ func main() {
 	mux.HandleFunc("POST /api/revoke", cfg.handlerRevokeRefreshToken)
 
 	// Setting handler for "POST /api/chirps"
-	mux.HandleFunc("POST /api/chirps", handlerChirpsPost)
+	mux.HandleFunc("POST /api/chirps", cfg.handlerChirpsPost)
 
 	// Setting handler for "GET /api/chirps"
 	mux.HandleFunc("GET /api/chirps", handlerChirpsGet)

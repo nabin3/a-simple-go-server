@@ -1,20 +1,18 @@
 package main
 
 import (
-	"cmp"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"slices"
 	"strconv"
-	"strings"
 
+	"github.com/nabin3/a-simple-web-server/internal/auth"
 	"github.com/nabin3/a-simple-web-server/internal/database"
 )
 
 // Defining handler func for "POST /api/chirps"
-func handlerChirpsPost(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerChirpsPost(w http.ResponseWriter, r *http.Request) {
 	const maxChirpLength = 140
 
 	// Struct for recieved data
@@ -22,12 +20,59 @@ func handlerChirpsPost(w http.ResponseWriter, r *http.Request) {
 		Body string `json:"body"`
 	}
 
+	// Check if access token is valid
+
+	// Getting token from request haeader
+	unverifiedToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("error in handlerUsersPut: %v", err)
+		respondWithError(w, 401, "bad request")
+		return
+	}
+
+	// Checking the type of token by exmining the issuer
+	tokenIssuer, err := auth.RetrieveJwtTokenIssuer(unverifiedToken)
+	if err != nil {
+		log.Printf("error in handlerChirpsPost at RetrieveJwtTokenIssuer: %v", err)
+		respondWithError(w, 500, "server-error")
+		return
+	}
+	if tokenIssuer != "chirpy-access" {
+		log.Printf("user error in handlerChirpsPost at token-issuer checker: user has not given a access token, issuer: %s", tokenIssuer)
+		respondWithError(w, 401, "bad token")
+		return
+	}
+
+	// Validating recieved token
+	emailInToken, err := auth.ValidateJWT(unverifiedToken, cfg.jwtSecret)
+	if err != nil {
+		log.Printf("error in handlerChirpsPost: %v", err)
+		respondWithError(w, 401, "token couldn't be validated")
+		return
+	}
+
+	db, err := database.NewDB("./database.json")
+	if err != nil {
+		log.Printf("can't create connection to database, error: %v", err)
+		respondWithError(w, 500, "Internal Erro")
+		return
+	}
+
+	// Getting a user from Users map of database
+	_, err = db.GetUserByEmail(emailInToken)
+	if err != nil {
+		log.Printf("error in handlerUsersPut: %v", err)
+		respondWithError(w, 401, "could't find any user for given token")
+		return
+	}
+	// Code for validating token is ended here
+
 	// Decoding recieved json
 	recievedData := data{}
 	decoder := json.NewDecoder(r.Body)
 	err1 := decoder.Decode(&recievedData)
 	if err1 != nil {
-		log.Printf("error unmarshaling from JSON: %s", err1)
+		log.Printf("error in handlerChirpsPost at decoder.Decode: %s", err1)
 		w.WriteHeader(500)
 		return
 	}
@@ -37,15 +82,8 @@ func handlerChirpsPost(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	} else {
-		db, err := database.NewDB("./database.json")
-		if err != nil {
-			log.Printf("can't create connection to database, error: %v", err)
-			respondWithError(w, 500, "Internal Erro")
-			return
-		}
-
 		cleaned_Chirp := profaneWordsReplacor(recievedData.Body)
-		chirp, err1 := db.CreateChirp(cleaned_Chirp)
+		chirp, err1 := db.CreateChirp(emailInToken, cleaned_Chirp)
 		if err1 != nil {
 			log.Printf("error: %v", err1)
 			respondWithError(w, 500, "internal error")
@@ -54,29 +92,6 @@ func handlerChirpsPost(w http.ResponseWriter, r *http.Request) {
 
 		respondWithJSON(w, 201, chirp)
 	}
-
-}
-
-// profane word filter
-func profaneWordsReplacor(msg string) string {
-	// Here considered empty struct rather than bool because of memory efficiency
-	profaneWords := map[string]struct{}{
-		"kerfuffle": {},
-		"sharbert":  {},
-		"fornax":    {},
-	}
-
-	// Creating slice of string by spliting the msg styring
-	msgSlice := strings.Split(msg, " ")
-
-	// Checking if a word from the slice of string(msgSlice) is a badword, if it is then reolacing it with ****
-	for index, word := range msgSlice {
-		if _, exist := profaneWords[strings.ToLower(word)]; exist {
-			msgSlice[index] = "****"
-		}
-	}
-
-	return strings.Join(msgSlice, " ")
 }
 
 // Defining handler func for "GET /api/chirps"
@@ -94,11 +109,6 @@ func handlerChirpsGet(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, 500, "internal error")
 		return
 	}
-
-	// Sorting all_chirps slice ny ID
-	slices.SortStableFunc(all_chirps, func(a, b database.Chirp) int {
-		return cmp.Compare(a.ID, b.ID)
-	})
 
 	respondWithJSON(w, 201, all_chirps)
 }

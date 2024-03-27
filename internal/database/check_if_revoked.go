@@ -8,8 +8,8 @@ func (db *DB) AlreadyRevoked(refreshToken string) error {
 		return err
 	}
 
-	if _, exist := data.RevokedRefreshTokens[refreshToken]; !exist {
-		return fmt.Errorf("this refresh token has not been revoked yet")
+	if _, exist := data.RevokedRefreshTokens[refreshToken]; exist {
+		return fmt.Errorf("revoked")
 	}
 
 	return nil

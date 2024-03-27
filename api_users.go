@@ -73,6 +73,7 @@ func (cfg *apiConfig) handlerUsersPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Getting token from request haeader
 	unverifiedToken, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		log.Printf("error in handlerUsersPut: %v", err)
@@ -88,10 +89,12 @@ func (cfg *apiConfig) handlerUsersPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tokenIssuer != "chirpy-access" {
+		log.Printf("user error in handlerUsersPut at issuer checker: user has not given a access token, issuer: %s", tokenIssuer)
 		respondWithError(w, 401, "bad token")
 		return
 	}
 
+	// Validating recieved token
 	emailInToken, err := auth.ValidateJWT(unverifiedToken, cfg.jwtSecret)
 	if err != nil {
 		log.Printf("error in handlerUsersPut: %v", err)
@@ -99,6 +102,7 @@ func (cfg *apiConfig) handlerUsersPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Getting a user from Users map of database
 	user, err := db.GetUserByEmail(emailInToken)
 	if err != nil {
 		log.Printf("error in handlerUsersPut: %v", err)
@@ -106,12 +110,14 @@ func (cfg *apiConfig) handlerUsersPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Deleting a user with given email id
 	if err := db.DeleteUser(emailInToken); err != nil {
 		log.Printf("error in handlerUsersPut: %v", err)
 		respondWithError(w, 500, "server problem")
 		return
 	}
 
+	// Creating new user
 	newUser, err := db.CreateUser(user.ID, recievedData.Email, recievedData.Password)
 	if err != nil {
 		log.Printf("handleUsersPost_func: error from CreateUser_func: %v", err)
